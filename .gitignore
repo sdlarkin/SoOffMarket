@@ -1,0 +1,8 @@
+node_modules/
+venv/
+.tmp/
+*.sqlite3
+.env
+__pycache__/
+credentials.json
+token.json
