@@ -44,7 +44,22 @@ class BuyBox(models.Model):
     property_condition = models.TextField(help_text="What level of property condition are you open to purchasing?")
     cheat_codes = models.CharField(max_length=255, blank=True, help_text="Cheat Codes")
     strategy_notes = models.TextField(blank=True, help_text="Anything else we should know about your buy box or investment strategy?")
-    
+
+    # Pipeline parameters (used by execution scripts)
+    county = models.ForeignKey(
+        'parcels.County', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='buyboxes',
+        help_text="County this buybox targets (links to GIS config)"
+    )
+    target_zoning = models.JSONField(default=list, blank=True, help_text='Zoning codes to match, e.g. ["R-2"]')
+    min_acres = models.FloatField(null=True, blank=True, help_text="Minimum acreage filter")
+    max_acres = models.FloatField(null=True, blank=True, help_text="Maximum acreage filter (null = no max)")
+    max_price = models.IntegerField(null=True, blank=True, help_text="Maximum appraised value filter")
+    target_geography = models.JSONField(default=dict, blank=True, help_text='Geography filters: {target_districts: [...], exclude_districts: [...], mixed_districts: {...}}')
+    min_compactness = models.FloatField(default=0.25, help_text="Minimum lot compactness score (0-1)")
+    comp_search_tiers = models.JSONField(default=list, blank=True, help_text='Comp search tiers: [{radius_ft, lookback_months, label}]')
+    duplex_scoring_enabled = models.BooleanField(default=True, help_text="Whether to run duplex friendliness scoring")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

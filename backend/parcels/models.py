@@ -2,6 +2,48 @@ from django.db import models
 import uuid
 
 
+class County(models.Model):
+    """GIS configuration for a county. Stores ArcGIS layer URLs, field mappings,
+    and county-specific parameters so the pipeline works for any county."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    state = models.CharField(max_length=10)
+    slug = models.SlugField(max_length=100, unique=True)
+    fips = models.CharField(max_length=10, blank=True, help_text="FIPS county code")
+
+    # GIS Layer URLs
+    parcel_layer_url = models.URLField(max_length=500, help_text="ArcGIS REST parcel layer URL")
+    parcel_layer_wkid = models.IntegerField(default=6576, help_text="Spatial reference WKID for parcel layer")
+    zoning_layer_url = models.URLField(max_length=500, blank=True, help_text="ArcGIS REST zoning layer URL")
+    zoning_layer_wkid = models.IntegerField(default=2274, help_text="Spatial reference WKID for zoning layer")
+    zoning_zone_field = models.CharField(max_length=50, default="ZONE", help_text="Field name for zone designation")
+    water_layer_url = models.URLField(max_length=500, blank=True)
+    water_layer_provider_field = models.CharField(max_length=50, default="DISTRICT", blank=True)
+    sewer_layer_url = models.URLField(max_length=500, blank=True)
+    sewer_layer_provider_field = models.CharField(max_length=50, default="ServiceProvider", blank=True)
+
+    # Field mapping: canonical name -> county-specific GIS field name
+    field_map = models.JSONField(default=dict, help_text="Maps canonical names to GIS field names: {parcel_id: TAX_MAP_NO, address: ADDRESS, ...}")
+
+    # County-specific entity exclusion keywords (in addition to universal ones)
+    entity_keywords = models.JSONField(default=list, blank=True, help_text="County-specific entity keywords e.g. ['CHATT CITY', 'HAMILTON COUNTY']")
+
+    # Coordinate conversion
+    out_sr = models.IntegerField(default=4326, help_text="Output spatial reference for lat/lon (usually WGS84 = 4326)")
+
+    # Metadata
+    max_records_per_query = models.IntegerField(default=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Counties"
+        unique_together = ('name', 'state')
+
+    def __str__(self):
+        return f"{self.name}, {self.state}"
+
+
 class Owner(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, help_text="Owner name as it appears on county records")

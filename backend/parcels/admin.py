@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Parcel, CompParcel, ParcelRating, Owner
+from .models import Parcel, CompParcel, ParcelRating, Owner, County
+
+
+@admin.register(County)
+class CountyAdmin(admin.ModelAdmin):
+    list_display = ['name', 'state', 'slug', 'parcel_layer_url']
+    search_fields = ['name', 'state']
 
 
 @admin.register(Owner)
