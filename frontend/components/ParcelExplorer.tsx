@@ -102,7 +102,20 @@ function StaticParcelCard({ parcel: p, isSelected, onSelect }: {
 }
 
 // ── Main Explorer ──
-export default function ParcelExplorer() {
+interface ParcelExplorerProps {
+    fetchOverview?: () => Promise<ParcelOverview[]>;
+    fetchDetail?: (id: string) => Promise<ParcelDetail>;
+    title?: string;
+}
+
+export default function ParcelExplorer({
+    fetchOverview,
+    fetchDetail,
+    title,
+}: ParcelExplorerProps = {}) {
+    const overviewFn = fetchOverview || fetchParcelOverview;
+    const detailFn = fetchDetail || fetchParcelDetail;
+
     const [parcels, setParcels] = useState<ParcelOverview[]>([]);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [detail, setDetail] = useState<ParcelDetail | null>(null);
@@ -121,13 +134,11 @@ export default function ParcelExplorer() {
     );
 
     useEffect(() => {
-        fetchParcelOverview().then(setParcels);
-        // Default sidebar open on desktop
+        overviewFn().then(setParcels);
         if (window.innerWidth >= 1024) setSidebarOpen(true);
     }, []);
 
     const selectParcel = useCallback(async (id: string) => {
-        // If already selected, just reopen the detail sheet
         if (id === selectedId && detail) {
             setMobileSheet('detail');
             return;
@@ -136,13 +147,13 @@ export default function ParcelExplorer() {
         setDetailLoading(true);
         setMobileSheet('detail');
         try {
-            const d = await fetchParcelDetail(id);
+            const d = await detailFn(id);
             setDetail(d);
             setRatingState(d.rating?.rating || '');
             setNotesState(d.rating?.notes || '');
         } catch (e) { console.error(e); }
         setDetailLoading(false);
-    }, [selectedId, detail]);
+    }, [selectedId, detail, detailFn]);
 
     async function handleRate(value: string) {
         if (!selectedId) return;
@@ -207,7 +218,7 @@ export default function ParcelExplorer() {
         <>
             <div className="p-3 border-b border-slate-700/50 flex-shrink-0">
                 <div className="flex items-center justify-between mb-2">
-                    <h1 className="text-sm font-bold text-white">R-2 Parcels</h1>
+                    <h1 className="text-sm font-bold text-white truncate">{title || 'R-2 Parcels'}</h1>
                     <div className="flex gap-2 text-xs text-slate-400">
                         <span className="text-emerald-400">{stats.yes}y</span>
                         <span className="text-amber-400">{stats.maybe}m</span>

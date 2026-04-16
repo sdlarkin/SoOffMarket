@@ -297,6 +297,63 @@ export async function rateParcel(id: string, data: { rating: string; notes?: str
     return res.json();
 }
 
+// ── Deals API (public, slug-based) ──
+
+export interface BuyerSummary {
+    id: string;
+    name: string;
+    slug: string;
+    company_name: string;
+    buybox_count: number;
+}
+
+export interface BuyBoxSummary {
+    id: string;
+    slug: string;
+    asset_type: string;
+    target_states: string;
+    price_range: string;
+    buyer_name: string;
+    buyer_slug: string;
+    parcel_count: number;
+}
+
+export interface DealsIndexResponse {
+    buyer: { name: string; slug: string; company_name: string };
+    buyboxes: BuyBoxSummary[];
+}
+
+export interface DealsBuyBoxResponse {
+    buyer: { name: string; slug: string };
+    buybox: { slug: string; asset_type: string; target_states: string; price_range: string };
+    parcels: ParcelOverview[];
+}
+
+export async function fetchDealsIndex(): Promise<BuyerSummary[]> {
+    const res = await fetch(`${API_BASE_URL}/deals/`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch deals');
+    return res.json();
+}
+
+export async function fetchDealsBuyer(buyerSlug: string): Promise<DealsIndexResponse> {
+    const res = await fetch(`${API_BASE_URL}/deals/${buyerSlug}/`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch buyer deals');
+    return res.json();
+}
+
+export async function fetchDealsBuyBox(buyerSlug: string, buyboxSlug: string, filters?: Record<string, string>): Promise<DealsBuyBoxResponse> {
+    const params = filters ? '?' + new URLSearchParams(filters).toString() : '';
+    const res = await fetch(`${API_BASE_URL}/deals/${buyerSlug}/${buyboxSlug}/${params}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch buybox deals');
+    return res.json();
+}
+
+export async function fetchDealsParcelDetail(buyerSlug: string, buyboxSlug: string, parcelId: string): Promise<ParcelDetail> {
+    const res = await fetch(`${API_BASE_URL}/deals/${buyerSlug}/${buyboxSlug}/${parcelId}/`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch parcel detail');
+    return res.json();
+}
+
 export async function reorderParcels(order: string[]): Promise<{ updated: number }> {
     const res = await fetch(`${API_BASE_URL}/parcels/reorder/`, {
         method: 'POST',
