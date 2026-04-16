@@ -1,0 +1,44 @@
+name: Deploy Backend to DigitalOcean
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Deploy to DigitalOcean
+      uses: appleboy/ssh-action@v1.0.3
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_REPO: ${{ github.repository }}
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        envs: GITHUB_TOKEN,GITHUB_REPO
+        script: |
+          # 1. Pull latest code
+          cd /opt/sooffmarket
+          git config --global --add safe.directory /opt/sooffmarket
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git fetch --all
+          git reset --hard origin/main
+          git clean -fd
+
+          # 2. Backend Deployment
+          cd /opt/sooffmarket/backend
+          source env/bin/activate
+          pip install -r requirements.txt
+          python manage.py migrate --noinput
+          python manage.py collectstatic --noinput
+          sudo systemctl restart gunicorn_sooffmarket
+
+          # 3. Reload Nginx
+          sudo systemctl reload nginx

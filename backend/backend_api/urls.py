@@ -21,4 +21,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("funnels.urls")),
     path("api/engine/", include("matcher.urls")),
+    path("api/", include("parcels.urls")),
 ]
