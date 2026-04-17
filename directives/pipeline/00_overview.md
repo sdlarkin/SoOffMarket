@@ -9,6 +9,31 @@ The pipeline follows the 3-layer architecture defined in `CLAUDE.md`:
 - **Orchestration** (you, the agent): Read directives, make decisions, call execution scripts
 - **Execution** (`execution/pipeline/`): Deterministic Python scripts that do the work
 
+## Workflow Variants
+
+The pipeline adapts based on the buyer's exit strategy. The `County.market_rules.comp_strategy` field determines which variant runs:
+
+| Strategy | comp_strategy | Description | Steps Skipped |
+|----------|---------------|-------------|---------------|
+| Vacant Land | `land_arv` | Find cheap land, estimate build-out ARV | None |
+| Fix-and-Flip | `acquisition_arv` | Find distressed homes, estimate renovation ARV | 06, 07, 08, 11 |
+| Wholesale | `single` | Find motivated sellers, estimate assignment fee | 05, 06, 07, 08, 11 |
+
+Each variant uses the same infrastructure but different filters, comp approaches, and scoring. See `workflow_variants.md` for full details on each variant's pipeline configuration, BuyBox fields, and best markets.
+
+Market rules (`County.market_rules`) also control how scripts interpret assessed values, handle Prop 13 states, and identify distress signals. See `market_rules.md` for the full key reference and examples.
+
+## Caching
+
+The pipeline caches GIS data to avoid re-querying 300K+ parcels on every run for the same county.
+
+- **`GISParcelCache`**: Raw parcel data per county, indexed for fast querying. First run queries the GIS API; subsequent runs read from cache.
+- **`MarketSnapshot`**: County-wide computed statistics (medians, $/sqft, flip rates). Has a 30-day TTL — automatically recomputed when stale.
+
+Cache is county-level, not BuyBox-level. Multiple buyers in the same county share cached data. Pass `--refresh-cache` to force a full re-query from GIS.
+
+See `caching.md` for the full model reference, cache lifecycle, and invalidation rules.
+
 ## Configuration
 
 All pipeline parameters are stored in the Django database — no config files needed.
