@@ -1,11 +1,26 @@
 from django.contrib import admin
-from .models import Parcel, CompParcel, ParcelRating, Owner, County
+from .models import Parcel, CompParcel, ParcelRating, Owner, County, MarketSnapshot, GISParcelCache
 
 
 @admin.register(County)
 class CountyAdmin(admin.ModelAdmin):
-    list_display = ['name', 'state', 'slug', 'parcel_layer_url']
+    list_display = ['name', 'state', 'slug', 'parcel_layer_url', 'updated_at']
     search_fields = ['name', 'state']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(MarketSnapshot)
+class MarketSnapshotAdmin(admin.ModelAdmin):
+    list_display = ['county', 'computed_at', 'parcel_count', 'median_total_value', 'median_ppsf', 'flip_rate']
+    list_filter = ['county']
+    readonly_fields = ['computed_at']
+
+
+@admin.register(GISParcelCache)
+class GISParcelCacheAdmin(admin.ModelAdmin):
+    list_display = ['parcel_id', 'county', 'address', 'community', 'total_value', 'sqft', 'sale_year', 'owner_occupied']
+    list_filter = ['county', 'community', 'owner_occupied']
+    search_fields = ['parcel_id', 'address']
 
 
 @admin.register(Owner)

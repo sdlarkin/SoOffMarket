@@ -31,6 +31,20 @@ class County(models.Model):
     # Coordinate conversion
     out_sr = models.IntegerField(default=4326, help_text="Output spatial reference for lat/lon (usually WGS84 = 4326)")
 
+    # Market rules: state/county-specific rules that affect deal analysis
+    market_rules = models.JSONField(default=dict, blank=True, help_text=(
+        "State/county-specific rules. Keys:\n"
+        "  prop_13: bool — CA Prop 13 frozen assessments\n"
+        "  assessment_reflects_market: bool — whether assessed value tracks market value\n"
+        "  reassessment_frequency: str — 'annual', 'biennial', 'on_sale', etc.\n"
+        "  homestead_exempt: bool — FL/TX homestead exemption affects analysis\n"
+        "  transfer_tax_rate: float — documentary stamp / transfer tax %\n"
+        "  disclosure_state: bool — seller must disclose defects\n"
+        "  comp_strategy: str — 'land_arv' (vacant land), 'acquisition_arv' (fix-flip), 'single'\n"
+        "  flip_indicators: list — which fields indicate distress in this market\n"
+        "  notes: str — free-form notes about this market"
+    ))
+
     # Metadata
     max_records_per_query = models.IntegerField(default=1000)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -42,6 +56,107 @@ class County(models.Model):
 
     def __str__(self):
         return f"{self.name}, {self.state}"
+
+
+class MarketSnapshot(models.Model):
+    """Cached county-wide market statistics. Computed from GIS data, refreshed periodically.
+    Avoids re-computing medians and benchmarks on every pipeline run."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    county = models.ForeignKey(County, on_delete=models.CASCADE, related_name='snapshots')
+
+    # When this snapshot was computed
+    computed_at = models.DateTimeField(auto_now_add=True)
+    parcel_count = models.IntegerField(default=0, help_text="Total parcels queried")
+
+    # County-wide stats
+    median_total_value = models.IntegerField(null=True, blank=True)
+    median_ppsf = models.FloatField(null=True, blank=True, help_text="Median price per sqft")
+    median_land_value = models.IntegerField(null=True, blank=True)
+    median_impr_ratio = models.FloatField(null=True, blank=True)
+    ppa_floor = models.FloatField(null=True, blank=True, help_text="25th percentile $/acre for land comps")
+    ppa_cap = models.FloatField(null=True, blank=True, help_text="3x median $/acre for land comps")
+
+    # Community-level stats stored as JSON: {community_name: {median_total, median_ppsf, p75_total, count}}
+    community_stats = models.JSONField(default=dict, blank=True)
+
+    # Flip analysis data (for fix-flip markets)
+    flip_rate = models.FloatField(null=True, blank=True, help_text="% of recent sales that are likely flips")
+    flip_non_owner_occ_rate = models.FloatField(null=True, blank=True)
+    flip_median_ppsf = models.FloatField(null=True, blank=True)
+
+    # Year-over-year trends stored as JSON: {year: {flip_pct, median_total, ...}}
+    yearly_trends = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ['-computed_at']
+        get_latest_by = 'computed_at'
+
+    def __str__(self):
+        return f"{self.county} snapshot ({self.computed_at.strftime('%Y-%m-%d')})"
+
+    @property
+    def is_stale(self):
+        """Consider stale after 30 days."""
+        from django.utils import timezone
+        from datetime import timedelta
+        return (timezone.now() - self.computed_at) > timedelta(days=30)
+
+
+class GISParcelCache(models.Model):
+    """Cached raw parcel data from GIS queries. Avoids re-querying the same
+    county's GIS on every pipeline run. Keyed by APN/parcel_id."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    county = models.ForeignKey(County, on_delete=models.CASCADE, related_name='parcel_cache')
+    parcel_id = models.CharField(max_length=50, help_text="APN or tax map number")
+
+    # Raw GIS data stored as JSON (all fields from the GIS query)
+    raw_data = models.JSONField(default=dict)
+
+    # Parsed/computed fields for fast querying
+    address = models.CharField(max_length=255, blank=True, db_index=True)
+    community = models.CharField(max_length=100, blank=True, db_index=True)
+    total_value = models.IntegerField(null=True, blank=True, db_index=True)
+    land_value = models.IntegerField(null=True, blank=True)
+    impr_value = models.IntegerField(null=True, blank=True)
+    sqft = models.IntegerField(null=True, blank=True)
+    bedrooms = models.IntegerField(null=True, blank=True)
+    year_built = models.IntegerField(null=True, blank=True)
+    acreage = models.FloatField(null=True, blank=True)
+    owner_occupied = models.BooleanField(null=True, blank=True, db_index=True)
+    sale_year = models.IntegerField(null=True, blank=True, db_index=True)
+    land_use_code = models.CharField(max_length=10, blank=True, db_index=True)
+
+    # Geometry
+    lat = models.FloatField(null=True, blank=True)
+    lon = models.FloatField(null=True, blank=True)
+    geometry_rings = models.JSONField(default=list, blank=True)
+
+    # Metadata
+    fetched_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('county', 'parcel_id')
+        indexes = [
+            models.Index(fields=['county', 'land_use_code', 'total_value']),
+            models.Index(fields=['county', 'community', 'total_value']),
+            models.Index(fields=['county', 'sale_year']),
+        ]
+
+    def __str__(self):
+        return f"{self.parcel_id} ({self.county})"
+
+    @property
+    def impr_ratio(self):
+        if self.total_value and self.total_value > 0:
+            return (self.impr_value or 0) / self.total_value
+        return None
+
+    @property
+    def ppsf(self):
+        if self.sqft and self.sqft > 0 and self.total_value:
+            return self.total_value / self.sqft
+        return None
 
 
 class Owner(models.Model):
